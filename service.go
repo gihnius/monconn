@@ -82,13 +82,11 @@ func (s *Service) Acquirable() bool {
 	if yes && s.IPLimit > 0 {
 		yes = s.ipCount <= s.IPLimit
 	}
-	if !yes {
-		if Debug {
-			logf("acquire connection failed: %d(ip) and %d(conn). %s",
-				s.ipCount,
-				s.connCount,
-				s.IPBucket.Log())
-		}
+	if Debug && !yes {
+		logf("acquire connection failed: %d(ip) and %d(conn). %s",
+			s.ipCount,
+			s.connCount,
+			s.IPBucket.Log())
 	}
 	return yes
 }
@@ -306,11 +304,4 @@ func (s *Service) Log() string {
 
 func tsFormat(ts int64) string {
 	return time.Unix(ts, 0).In(time.Local).Format(time.RFC3339)
-}
-
-// Shutdown stop all services
-func Shutdown() {
-	for _, s := range ServicesList() {
-		s.Stop()
-	}
 }

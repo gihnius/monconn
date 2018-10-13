@@ -12,13 +12,10 @@ type serviceManager struct {
 
 var sm = serviceManager{store: map[string]*Service{}}
 
-// GetService by service id (sid)
-func GetService(sid string) (*Service, bool) {
-	return sm.get(sid)
-}
-
 // NewService add a new service, named by sid
-func NewService(sid string) *Service {
+func NewService(sid string) (s *Service) {
+	sm.Lock()
+	defer sm.Unlock()
 	if sid == "" {
 		sid = "default"
 	}
@@ -26,22 +23,6 @@ func NewService(sid string) *Service {
 		logf("service with sid: %s already exists!", sid)
 		return nil
 	}
-	return sm.add(sid)
-}
-
-// DelService delete a service from cache
-func DelService(sid string) {
-	sm.del(sid)
-}
-
-// ServicesList list all live services
-func ServicesList() map[string]*Service {
-	return sm.store
-}
-
-func (sm *serviceManager) add(sid string) (s *Service) {
-	sm.Lock()
-	defer sm.Unlock()
 	s = newService()
 	s.sid = sid
 	sm.store[sid] = s
@@ -49,19 +30,33 @@ func (sm *serviceManager) add(sid string) (s *Service) {
 	return
 }
 
-func (sm *serviceManager) get(sid string) (s *Service, ok bool) {
+// GetService
+func GetService(sid string) (s *Service, ok bool) {
 	sm.Lock()
 	defer sm.Unlock()
 	s, ok = sm.store[sid]
 	return
 }
 
-func (sm *serviceManager) del(sid string) {
+// DelService delete a service
+func DelService(sid string) {
 	sm.Lock()
 	defer sm.Unlock()
 	if s, ok := sm.store[sid]; ok {
 		delete(sm.store, sid)
 		s.Stop()
 		logf("deleted %s service.", sid)
+	}
+}
+
+// ServicesList list all live services
+func ServicesList() map[string]*Service {
+	return sm.store
+}
+
+// Shutdown stop all services
+func Shutdown() {
+	for _, s := range sm.store {
+		s.Stop()
 	}
 }

@@ -70,7 +70,8 @@ func (c *MonConn) Close() (err error) {
 		close(c.ch)
 		c.closed = true
 		if Debug {
-			logf("connection %s closed. elapsed: %d(s).",
+			logf("service: %s connection %s closed. elapsed: %d(s).",
+				c.service.Sid(),
 				c.label,
 				time.Now().Unix()-c.createdAt)
 		}
