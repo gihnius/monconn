@@ -112,7 +112,7 @@ func (c *MonConn) Close() (err error) {
 		close(c.ch)
 		c.closed = true
 		if Debug {
-			logf("service: %s connection %s closed. elapsed: %d(s).",
+			logf("S[%s] connection %s closed. elapsed: %d(s).",
 				c.service.sid,
 				c.label,
 				time.Now().Unix()-c.createdAt)
@@ -193,7 +193,7 @@ func (c *MonConn) updateService() {
 		atomic.StoreInt64(&c.service.accessAt, c.readAt)
 	}
 	if Debug {
-		logf("MonConn updateService: %s", c.service.Log())
+		logf("S[%s] updateService: %s", c.service.sid, c.service.Log())
 	}
 }
 

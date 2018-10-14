@@ -22,7 +22,7 @@ func NewService(sid string) (s *Service) {
 	s = newService()
 	s.sid = sid
 	sm.store[sid] = s
-	logf("Added [%s] service.", sid)
+	logf("Added service %s.", sid)
 	return
 }
 
@@ -41,7 +41,7 @@ func DelService(sid string) {
 	if s, ok := sm.store[sid]; ok {
 		delete(sm.store, sid)
 		s.Stop()
-		logf("deleted %s service.", sid)
+		logf("deleted service %s.", sid)
 	}
 }
 

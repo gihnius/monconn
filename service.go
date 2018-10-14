@@ -83,7 +83,8 @@ func (s *Service) Acquirable() bool {
 		yes = s.ipCount <= s.IPLimit
 	}
 	if Debug && !yes {
-		logf("acquire connection failed: %d(ip) and %d(conn). %s",
+		logf("S[%s] acquire connection failed: %d(ip) and %d(conn). %s",
+			s.sid,
 			s.ipCount,
 			s.connCount,
 			s.IPBucket.Log())
@@ -116,12 +117,12 @@ func (s *Service) Start(ln net.Listener) {
 
 // Stop stop the listener and close all of connections
 func (s *Service) Stop() {
-	logf("stopping [%s] service...", s.sid)
-	logf("service stats: %s", s.Log())
-	logf("service connections: %s", s.IPBucket.Log())
+	logf("S[%s] stopping...", s.sid)
+	logf("S[%s] stats: %s", s.sid, s.Log())
+	logf("S[%s] connecting ips: %s", s.sid, s.IPBucket.Log())
 	close(s.stopChan)
 	s.wg.Wait()
-	logf("stopped [%s] service.", s.sid)
+	logf("S[%s] stopped.", s.sid)
 }
 
 // monitorListener wait listener
@@ -129,7 +130,7 @@ func (s *Service) monitorListener() {
 	defer s.wg.Done()
 	// wait for service Stop
 	<-s.stopChan
-	logf("stopping listening on %s", s.ln.Addr())
+	logf("S[%s] stopping listening on %s", s.sid, s.ln.Addr())
 	s.ln.Close()
 }
 
@@ -158,14 +159,14 @@ func (s *Service) grabConn(c *MonConn) bool {
 	// limit IPs
 	if s.IPLimit > 0 {
 		if ok := s.IPBucket.Add(clientIP); !ok {
-			logf("Add ip %s to IPBucket failed.", clientIP)
+			logf("S[%s] Add ip %s to IPBucket failed.", s.sid, clientIP)
 		}
 		atomic.StoreInt64(&s.ipCount, s.IPBucket.Count())
 	}
 	// check reject ip
 	for _, ip := range s.ipBlackList {
 		if ip == clientIP {
-			logf("client ip: %s in blacklist, closing connection.", clientIP)
+			logf("S[%s] client ip: %s in blacklist, closing connection.", s.sid, clientIP)
 			c.Close()
 			return false
 		}
@@ -194,37 +195,37 @@ func (s *Service) monitorConn(c *MonConn) {
 		return
 	}
 	if Debug {
-		logf("service %s monitored connection: %s", s.sid, c.label)
+		logf("S[%s] monitored connection: %s", s.sid, c.label)
 	}
 	if s.IdleInterval < 5 {
 		s.IdleInterval = 5
-		logf("IdleInterval must >= 5")
+		logf("S[%s] IdleInterval must >= 5", s.sid)
 	}
 	heartbeat := time.Tick(time.Second * time.Duration(s.IdleInterval))
 	for {
 		select {
 		case <-s.stopChan:
-			logf("disconnecting connection by service: %s", c.label)
+			logf("S[%s] disconnecting connection by service.", s.sid, c.label)
 			c.Close()
 			return
 		case <-c.ch:
 			// quit monitor by c.Close() proactive call
 			if Debug {
-				logf("connection monitor finished.")
+				logf("S[%s] connection %s monitor finished.", s.sid, c.label)
 			}
 			return
 		case <-heartbeat:
 			if c.Idle() {
 				c.Close()
 				if Debug {
-					logf("connection idle too long: %s", c.Log())
+					logf("S[%s] connection idle too long: %s", s.sid, c.Log())
 				}
 				return
 			}
 			if Debug {
 				c.updateService() // see realtime updates on debug mode
-				logf("service stats: %s", s.Log())
-				logf("connection stats: %s", c.Log())
+				logf("S[%s] stats: %s", s.sid, s.Log())
+				logf("S[%s] connection stats: %s", s.sid, c.Log())
 			}
 		}
 	}
