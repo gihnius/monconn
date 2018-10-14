@@ -51,7 +51,7 @@ type Service struct {
 	KeepAlive    bool     // keep conn alive default true
 }
 
-// call NewService to construct, and mondify exported attrs from returnd instance
+// call NewService to construct, and mondify exported attrs from returned instance
 func newService() (s *Service) {
 	s = &Service{
 		stopChan:     make(chan struct{}),
