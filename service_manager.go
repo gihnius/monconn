@@ -19,10 +19,6 @@ func NewService(sid string) (s *Service) {
 	if sid == "" {
 		sid = "default"
 	}
-	if _, ok := GetService(sid); ok {
-		logf("service with sid: %s already exists!", sid)
-		return nil
-	}
 	s = newService()
 	s.sid = sid
 	sm.store[sid] = s

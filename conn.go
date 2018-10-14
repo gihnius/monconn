@@ -3,16 +3,49 @@ package monconn
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"net"
 	"sync"
 	"sync/atomic"
 	"time"
 )
 
+var bufioReaderPool sync.Pool
+var bufioWriterPool sync.Pool
+
+func newBufioReader(r io.Reader) *bufio.Reader {
+	if v := bufioReaderPool.Get(); v != nil {
+		br := v.(*bufio.Reader)
+		br.Reset(r)
+		return br
+	}
+	return bufio.NewReader(r)
+}
+
+func putBufioReader(br *bufio.Reader) {
+	br.Reset(nil)
+	bufioReaderPool.Put(br)
+}
+
+func newBufioWriter(w io.Writer) *bufio.Writer {
+	if v := bufioWriterPool.Get(); v != nil {
+		bw := v.(*bufio.Writer)
+		bw.Reset(w)
+		return bw
+	}
+	return bufio.NewWriterSize(w, 4096)
+}
+
+func putBufioWriter(bw *bufio.Writer) {
+	bw.Reset(nil)
+	bufioWriterPool.Put(bw)
+}
+
 // MonConn wrap net.Conn for extra monitor data
 type MonConn struct {
 	net.Conn
-	buf        *bufio.ReadWriter
+	bufr       *bufio.Reader
+	bufw       *bufio.Writer
 	service    *Service
 	label      string
 	readBytes  int64
@@ -26,14 +59,14 @@ type MonConn struct {
 }
 
 func (c *MonConn) Read(b []byte) (n int, err error) {
-	if c.service.ReadTimeout > 0 {
+	if c.service.ReadTimeout != 0 {
 		dur := time.Now().Add(time.Second * time.Duration(c.service.ReadTimeout))
 		err := c.Conn.SetReadDeadline(dur)
 		if err != nil {
 			return 0, err
 		}
 	}
-	n, err = c.buf.Read(b)
+	n, err = c.bufr.Read(b)
 	if err == nil {
 		c.readBytes += int64(n)
 		c.readAt = time.Now().Unix()
@@ -42,18 +75,18 @@ func (c *MonConn) Read(b []byte) (n int, err error) {
 }
 
 func (c *MonConn) Write(b []byte) (n int, err error) {
-	if c.service.WriteTimeout > 0 {
+	if c.service.WriteTimeout != 0 {
 		dur := time.Now().Add(time.Second * time.Duration(c.service.WriteTimeout))
 		err := c.Conn.SetWriteDeadline(dur)
 		if err != nil {
 			return 0, err
 		}
 	}
-	n, err = c.buf.Write(b)
+	n, err = c.bufw.Write(b)
 	if err == nil {
 		c.writeBytes += int64(n)
 		c.writeAt = time.Now().Unix()
-		c.buf.Flush()
+		c.bufw.Flush()
 	}
 	return
 }
@@ -65,13 +98,22 @@ func (c *MonConn) Close() (err error) {
 		c.mutex.Unlock()
 	}()
 	if !c.closed {
+		if c.bufw != nil {
+			c.bufw.Flush()
+			putBufioWriter(c.bufw)
+			c.bufw = nil
+		}
+		if c.bufr != nil {
+			putBufioReader(c.bufr)
+			c.bufr = nil
+		}
 		err = c.Conn.Close()
 		c.updateService()
 		close(c.ch)
 		c.closed = true
 		if Debug {
 			logf("service: %s connection %s closed. elapsed: %d(s).",
-				c.service.Sid(),
+				c.service.sid,
 				c.label,
 				time.Now().Unix()-c.createdAt)
 		}
@@ -81,8 +123,11 @@ func (c *MonConn) Close() (err error) {
 
 // init after construct a MonConn, call init()
 func (c *MonConn) init() {
-	if c.buf == nil {
-		c.buf = bufio.NewReadWriter(bufio.NewReader(c.Conn), bufio.NewWriter(c.Conn))
+	if c.bufr == nil {
+		c.bufr = newBufioReader(c.Conn)
+	}
+	if c.bufw == nil {
+		c.bufw = newBufioWriter(c.Conn)
 	}
 	if c.service.KeepAlive {
 		KeepAlive(c.Conn)
@@ -120,7 +165,7 @@ func (c *MonConn) Stats() string {
 }`
 	return fmt.Sprintf(format,
 		c.label,
-		c.service.Sid(),
+		c.service.sid,
 		c.readBytes,
 		c.writeBytes,
 		c.readAt,
@@ -131,7 +176,7 @@ func (c *MonConn) Stats() string {
 func (c *MonConn) Log() string {
 	format := `sid: %s, conn: %s, r: %d, w: %d, rt: %s, wt: %s`
 	return fmt.Sprintf(format,
-		c.service.Sid(),
+		c.service.sid,
 		c.label,
 		c.readBytes,
 		c.writeBytes,

@@ -3,7 +3,6 @@ package monconn
 
 import (
 	"fmt"
-	"log"
 	"net"
 	"strings"
 	"sync"
@@ -22,7 +21,8 @@ var DebugFunc LogFunc
 
 func logf(format string, args ...interface{}) {
 	if DebugFunc == nil {
-		log.Printf(format, args...)
+		fmt.Printf(format, args...)
+		fmt.Println()
 	} else {
 		DebugFunc(format, args...)
 	}
@@ -116,12 +116,12 @@ func (s *Service) Start(ln net.Listener) {
 
 // Stop stop the listener and close all of connections
 func (s *Service) Stop() {
-	logf("stopping [%s] service...", s.Sid())
+	logf("stopping [%s] service...", s.sid)
 	logf("service stats: %s", s.Log())
 	logf("service connections: %s", s.IPBucket.Log())
 	close(s.stopChan)
 	s.wg.Wait()
-	logf("stopped [%s] service.", s.Sid())
+	logf("stopped [%s] service.", s.sid)
 }
 
 // monitorListener wait listener
@@ -194,7 +194,7 @@ func (s *Service) monitorConn(c *MonConn) {
 		return
 	}
 	if Debug {
-		logf("monitored connection: %s", c.label)
+		logf("service %s monitored connection: %s", s.sid, c.label)
 	}
 	if s.IdleInterval < 5 {
 		s.IdleInterval = 5
@@ -280,7 +280,7 @@ func (s *Service) Stats() string {
   "down": %d
 }`
 	return fmt.Sprintf(format,
-		s.Sid(),
+		s.sid,
 		s.Uptime(),
 		strings.Join(s.IPs(), ","),
 		s.connCount,
@@ -293,7 +293,7 @@ func (s *Service) Stats() string {
 func (s *Service) Log() string {
 	format := `sid: %s, up: %d, c: %d, ip: %d, r: %d, w: %d, t: %s`
 	return fmt.Sprintf(format,
-		s.Sid(),
+		s.sid,
 		s.Uptime(),
 		s.connCount,
 		s.ipCount,
