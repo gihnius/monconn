@@ -87,22 +87,28 @@ func (s *Service) ReleaseIP(ip ...string) {
 }
 
 // check reject ip
-func (s *Service) verifyIP(ip string) bool {
+func (s *Service) blockedIP(ip string) bool {
 	_, ok := s.ipBlackList[ip]
-	if ok {
-		logf("S[%s] client ip: %s in blacklist!.", s.sid, ip)
-	}
-	return !ok
+	return ok
 }
 
 // Acquirable check ConnLimit or IPLimit if exceed
-func (s *Service) Acquirable() bool {
+// call with nil if before accepted connection
+func (s *Service) Acquirable(c net.Conn) bool {
 	yes := true
 	if s.ConnLimit > 0 {
 		yes = s.connCount <= s.ConnLimit
 	}
 	if yes && s.IPLimit > 0 {
 		yes = s.ipCount <= s.IPLimit
+	}
+	if c != nil {
+		clientIP, _, _ := net.SplitHostPort(c.RemoteAddr().String())
+		if s.blockedIP(clientIP) {
+			logf("S[%s] client ip: %s is blocked!.", s.sid, clientIP)
+			c.Close()
+			return false
+		}
 	}
 	if Debug && !yes {
 		logf("S[%s] acquire connection failed: %d(ip) and %d(conn). %s",
@@ -115,24 +121,17 @@ func (s *Service) Acquirable() bool {
 }
 
 // WrapMonConn wrap net.Conn return (net.Conn, ok)
-func (s *Service) WrapMonConn(c net.Conn) (net.Conn, bool) {
+func (s *Service) WrapMonConn(c net.Conn) net.Conn {
 	mc := &MonConn{
 		Conn:      c,
 		service:   s,
 		createdAt: time.Now().Unix(),
 		ch:        make(chan struct{}),
 	}
-	ok := true
-	if s.verifyIP(mc.clientIP()) {
-		mc.init()
-		s.wg.Add(1)
-		go s.monitorConn(mc)
-	} else {
-		c.Close()
-		mc = nil
-		ok = false
-	}
-	return mc, ok
+	mc.init()
+	s.wg.Add(1)
+	go s.monitorConn(mc)
+	return mc
 }
 
 // Start monitor listener

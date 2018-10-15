@@ -18,7 +18,7 @@ func server() {
 	sv.KeepAlive = false // default true
 	// sv.ConnLimit = 10                 // limit up to 10 concurrency connections
 	// sv.IPLimit = 5                    // limit up to 5 concurrency client ips
-	sv.RejectIP("127.0.0.1", "1.2.3.4", "5.6.7.8") // add ip to blacklist
+	sv.RejectIP("1.2.3.4", "5.6.7.8") // add ip to blacklist
 
 	fmt.Println("Launching server...")
 	ln, _ := net.Listen("tcp", "127.0.0.1:1234")
@@ -27,9 +27,8 @@ func server() {
 	for {
 		conn, _ := ln.Accept()
 		// main call, monitor incomming connection
-		c, ok := sv.WrapMonConn(conn)
-		if ok {
-			go handleConn(c)
+		if sv.Acquirable(conn) {
+			go handleConn(sv.WrapMonConn(conn))
 		}
 	}
 }
