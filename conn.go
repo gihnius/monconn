@@ -12,6 +12,8 @@ import (
 
 var bufioReaderPool sync.Pool
 var bufioWriterPool sync.Pool
+var bufSizeR = 4096
+var bufSizeW = 4096
 
 func newBufioReader(r io.Reader) *bufio.Reader {
 	if v := bufioReaderPool.Get(); v != nil {
@@ -19,7 +21,7 @@ func newBufioReader(r io.Reader) *bufio.Reader {
 		br.Reset(r)
 		return br
 	}
-	return bufio.NewReader(r)
+	return bufio.NewReaderSize(r, bufSizeR)
 }
 
 func putBufioReader(br *bufio.Reader) {
@@ -33,7 +35,7 @@ func newBufioWriter(w io.Writer) *bufio.Writer {
 		bw.Reset(w)
 		return bw
 	}
-	return bufio.NewWriterSize(w, 4096)
+	return bufio.NewWriterSize(w, bufSizeW)
 }
 
 func putBufioWriter(bw *bufio.Writer) {
@@ -70,6 +72,9 @@ func (c *MonConn) Read(b []byte) (n int, err error) {
 	if err == nil {
 		c.readBytes += int64(n)
 		c.readAt = time.Now().Unix()
+		if n == bufSizeR {
+			bufSizeR += 1024
+		}
 	}
 	return
 }
@@ -87,8 +92,23 @@ func (c *MonConn) Write(b []byte) (n int, err error) {
 		c.writeBytes += int64(n)
 		c.writeAt = time.Now().Unix()
 		c.bufw.Flush()
+		if n == bufSizeW {
+			bufSizeW += 1024
+		}
 	}
 	return
+}
+
+func (c *MonConn) finalFlush() {
+	if c.bufw != nil {
+		c.bufw.Flush()
+		putBufioWriter(c.bufw)
+		c.bufw = nil
+	}
+	if c.bufr != nil {
+		putBufioReader(c.bufr)
+		c.bufr = nil
+	}
 }
 
 // Close close once
@@ -98,15 +118,7 @@ func (c *MonConn) Close() (err error) {
 		c.mutex.Unlock()
 	}()
 	if !c.closed {
-		if c.bufw != nil {
-			c.bufw.Flush()
-			putBufioWriter(c.bufw)
-			c.bufw = nil
-		}
-		if c.bufr != nil {
-			putBufioReader(c.bufr)
-			c.bufr = nil
-		}
+		c.finalFlush()
 		err = c.Conn.Close()
 		c.updateService()
 		close(c.ch)
