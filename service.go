@@ -33,7 +33,7 @@ type Service struct {
 	*IPBucket
 	sid          string
 	ln           net.Listener
-	stopChan     chan struct{}
+	stopCh       chan struct{}
 	wg           *sync.WaitGroup
 	ipBlackList  map[string]bool // reject connection from these client ip
 	bootAt       int64           // service start time
@@ -53,9 +53,9 @@ type Service struct {
 
 // call monconn.NewService(SID) to construct
 // and mondify exported attrs from returned instance
-func newService() (s *Service) {
+func initService() (s *Service) {
 	s = &Service{
-		stopChan:     make(chan struct{}),
+		stopCh:       make(chan struct{}),
 		wg:           &sync.WaitGroup{},
 		ipBlackList:  map[string]bool{},
 		IPBucket:     &IPBucket{&sync.Map{}},
@@ -148,7 +148,7 @@ func (s *Service) Stop() {
 	logf("S[%s] stopping...", s.sid)
 	logf("S[%s] stats: %s", s.sid, s.Log())
 	logf("S[%s] connecting ips: %s", s.sid, s.IPBucket.Log())
-	close(s.stopChan)
+	close(s.stopCh)
 	s.wg.Wait()
 	logf("S[%s] stopped.", s.sid)
 }
@@ -157,7 +157,7 @@ func (s *Service) Stop() {
 func (s *Service) monitorListener() {
 	defer s.wg.Done()
 	// wait for service Stop
-	<-s.stopChan
+	<-s.stopCh
 	logf("S[%s] stopping listening on %s", s.sid, s.ln.Addr())
 	s.ln.Close()
 }
@@ -221,8 +221,8 @@ func (s *Service) monitorConn(c *MonConn) {
 	heartbeat := time.Tick(time.Second * time.Duration(s.IdleInterval))
 	for {
 		select {
-		case <-s.stopChan:
-			logf("S[%s] disconnecting connection by service.", s.sid, c.label)
+		case <-s.stopCh:
+			logf("S[%s] disconnecting connection %s by service.", s.sid, c.label)
 			c.Close()
 			return
 		case <-c.ch:

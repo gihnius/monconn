@@ -21,7 +21,7 @@ func NewService(sid string) (s *Service) {
 	if sid == "" {
 		sid = "default"
 	}
-	s = newService()
+	s = initService()
 	s.sid = sid
 	sm.store[sid] = s
 	logf("Added service %s.", sid)

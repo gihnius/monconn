@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net"
+	"sync"
 	"time"
 )
 
@@ -11,19 +12,29 @@ func clientConn() net.Conn {
 	return conn
 }
 
-func client() {
+func client(wg *sync.WaitGroup) {
 	c := clientConn()
-    defer c.Close()
+	defer func() {
+		c.Close()
+		wg.Done()
+	}()
+	if c == nil {
+		fmt.Println("unable to connect to server")
+		return
+	}
+	fmt.Println("connected to server:", c.LocalAddr())
 	buf := make([]byte, 256)
 	for {
 		_, err := c.Write([]byte("hello server!"))
 		if err != nil {
 			fmt.Println("write to server err: ", err)
+			break
 		}
 
 		_, err = c.Read(buf)
 		if err != nil {
 			fmt.Println("read err: ", err)
+			break
 		} else {
 			// fmt.Print("received from server:", string(buf[:n]))
 		}
@@ -32,11 +43,12 @@ func client() {
 }
 
 func main() {
-	for i := 0; i <= 5000; i++ {
-		go client()
+	wg := &sync.WaitGroup{}
+	for i := 0; i <= 10; i++ {
+		wg.Add(1)
+		go client(wg)
 	}
-
-	select {}
+	wg.Wait()
 }
 
 // go run main.go

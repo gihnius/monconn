@@ -3,12 +3,14 @@ package main
 import (
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/gihnius/monconn"
 )
 
+var sv = monconn.NewService("localhost:1234")
+
 func server() {
-	sv := monconn.NewService("localhost:1234")
 	monconn.Debug = true // enable debug logging
 	// service OPTIONAL settings
 	// reset within the service life cycle, will affect new connections
@@ -27,7 +29,7 @@ func server() {
 	for {
 		conn, _ := ln.Accept()
 		// main call, monitor incomming connection
-		if sv.Acquirable(conn) {
+		if conn != nil && sv.Acquirable(conn) {
 			go handleConn(sv.WrapMonConn(conn))
 		}
 	}
@@ -50,6 +52,8 @@ func handleConn(c net.Conn) {
 
 func main() {
 	go server()
+	time.Sleep(20 * time.Second)
+	sv.Stop()
 	select {}
 }
 
