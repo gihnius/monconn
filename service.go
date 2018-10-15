@@ -1,4 +1,4 @@
-// Package monconn provides monitors for cnnections from a listener
+// Package monconn provides monitors for cnnections from a tcp listener
 package monconn
 
 import (
@@ -51,7 +51,8 @@ type Service struct {
 	KeepAlive    bool     // keep conn alive default true
 }
 
-// call NewService to construct, and mondify exported attrs from returned instance
+// call monconn.NewService(SID) to construct
+// and mondify exported attrs from returned instance
 func newService() (s *Service) {
 	s = &Service{
 		stopChan:     make(chan struct{}),
@@ -71,6 +72,28 @@ func newService() (s *Service) {
 func (s *Service) RejectIP(ip ...string) {
 	s.ipBlackList = append(s.ipBlackList, ip...)
 	logf("added ip:%v to blacklist", ip)
+}
+
+// ReleaseIP remove ip from blacklist
+func (s *Service) ReleaseIP(ip ...string) {
+	delete := func(s []string, i int) []string {
+		return append(s[:i], s[i+1:]...)
+	}
+	index := func(s []string, e string) int {
+		for i := range s {
+			if s[i] == e {
+				return i
+			}
+		}
+		return -1
+	}
+	for i := range ip {
+		ipIdx := index(s.ipBlackList, ip[i])
+		if ipIdx >= 0 {
+			delete(s.ipBlackList, ipIdx)
+		}
+	}
+	logf("removed ip:%v from blacklist", ip)
 }
 
 // Acquirable check ConnLimit or IPLimit if exceed
@@ -134,7 +157,7 @@ func (s *Service) monitorListener() {
 	s.ln.Close()
 }
 
-// EliminateFlow reduce the num record of rw bytes
+// EliminateBytes reduce the num record of rw bytes
 // service ReadBytes & WriteBytes will not always growing,
 // eliminate the amount after extract and store to other place,
 // eg. store them in redis or database.
@@ -241,22 +264,27 @@ func (s *Service) Uptime() int64 {
 	return time.Now().Unix() - s.bootAt
 }
 
+// Sid get sid
 func (s *Service) Sid() string {
 	return s.sid
 }
 
+// AccessAt get accessAt
 func (s *Service) AccessAt() int64 {
 	return s.accessAt
 }
 
+// BootAt get bootAt
 func (s *Service) BootAt() int64 {
 	return s.bootAt
 }
 
+// ConnCount get connCount
 func (s *Service) ConnCount() int64 {
 	return s.connCount
 }
 
+// IPCount get ipCount
 func (s *Service) IPCount() int64 {
 	return s.ipCount
 }
