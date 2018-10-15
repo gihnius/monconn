@@ -1,6 +1,8 @@
 package monconn
 
 import (
+	"bytes"
+	"strings"
 	"sync"
 )
 
@@ -48,6 +50,23 @@ func DelService(sid string) {
 // ServicesList list all live services
 func ServicesList() map[string]*Service {
 	return sm.store
+}
+
+// TotalConns total connections count
+func TotalConns() (res int64) {
+	for _, s := range sm.store {
+		res += s.connCount
+	}
+	return
+}
+
+// IPs all client ips, return a comma-seperated string
+func IPs() string {
+	var buffer bytes.Buffer
+	for _, s := range sm.store {
+		buffer.WriteString(strings.Join(s.IPs(), ","))
+	}
+	return buffer.String()
 }
 
 // Shutdown stop all services
