@@ -1,4 +1,4 @@
-// Package monconn provides monitors for cnnections from a tcp listener
+// Package monconn provides monitors for cnnections from tcp listener
 package monconn
 
 import (
@@ -35,20 +35,20 @@ type Service struct {
 	ln           net.Listener
 	stopChan     chan struct{}
 	wg           *sync.WaitGroup
-	ipBlackList  []string // reject connection from these client ip addresses
-	bootAt       int64    // service start time
-	accessAt     int64    // client latest accessed(read) time
-	connCount    int64    // current connections count
-	ipCount      int64    // current connecting ips count
-	readBytes    int64    // connections read total bytes
-	writeBytes   int64    // connections write total bytes
-	ReadTimeout  int      // in seconds, default 10 minutes
-	WriteTimeout int      // in seconds, default 10 minutes
-	MaxIdle      int      // in seconds, default 15 minutes
-	IdleInterval int      // check idle every N seconds, default 15 seconds
-	ConnLimit    int64    // 0 means no limit
-	IPLimit      int64    // 0 means no limit
-	KeepAlive    bool     // keep conn alive default true
+	ipBlackList  map[string]bool // reject connection from these client ip
+	bootAt       int64           // service start time
+	accessAt     int64           // client latest accessed(read) time
+	connCount    int64           // current connections count
+	ipCount      int64           // current connecting ips count
+	readBytes    int64           // connections read total bytes
+	writeBytes   int64           // connections write total bytes
+	ReadTimeout  int             // in seconds, default 10 minutes
+	WriteTimeout int             // in seconds, default 10 minutes
+	MaxIdle      int             // in seconds, default 15 minutes
+	IdleInterval int             // check idle every N seconds, default 15 seconds
+	ConnLimit    int64           // 0 means no limit
+	IPLimit      int64           // 0 means no limit
+	KeepAlive    bool            // keep conn alive default true
 }
 
 // call monconn.NewService(SID) to construct
@@ -57,7 +57,7 @@ func newService() (s *Service) {
 	s = &Service{
 		stopChan:     make(chan struct{}),
 		wg:           &sync.WaitGroup{},
-		ipBlackList:  make([]string, 128),
+		ipBlackList:  map[string]bool{},
 		IPBucket:     &IPBucket{&sync.Map{}},
 		ReadTimeout:  600,
 		WriteTimeout: 600,
@@ -70,30 +70,29 @@ func newService() (s *Service) {
 
 // RejectIP add (client) ip(s) to blacklist
 func (s *Service) RejectIP(ip ...string) {
-	s.ipBlackList = append(s.ipBlackList, ip...)
-	logf("added ip:%v to blacklist", ip)
+	for _, addr := range ip {
+		s.ipBlackList[addr] = true
+	}
+	logf("added ip:%v to blacklist", s.ipBlackList)
 }
 
 // ReleaseIP remove ip from blacklist
 func (s *Service) ReleaseIP(ip ...string) {
-	delete := func(s []string, i int) []string {
-		return append(s[:i], s[i+1:]...)
-	}
-	index := func(s []string, e string) int {
-		for i := range s {
-			if s[i] == e {
-				return i
-			}
-		}
-		return -1
-	}
-	for i := range ip {
-		ipIdx := index(s.ipBlackList, ip[i])
-		if ipIdx >= 0 {
-			delete(s.ipBlackList, ipIdx)
+	for _, addr := range ip {
+		if _, ok := s.ipBlackList[addr]; ok {
+			delete(s.ipBlackList, addr)
 		}
 	}
 	logf("removed ip:%v from blacklist", ip)
+}
+
+// check reject ip
+func (s *Service) verifyIP(ip string) bool {
+	_, ok := s.ipBlackList[ip]
+	if ok {
+		logf("S[%s] client ip: %s in blacklist!.", s.sid, ip)
+	}
+	return !ok
 }
 
 // Acquirable check ConnLimit or IPLimit if exceed
@@ -115,18 +114,25 @@ func (s *Service) Acquirable() bool {
 	return yes
 }
 
-// WrapMonConn wrap net.Conn
-func (s *Service) WrapMonConn(c net.Conn) net.Conn {
+// WrapMonConn wrap net.Conn return (net.Conn, ok)
+func (s *Service) WrapMonConn(c net.Conn) (net.Conn, bool) {
 	mc := &MonConn{
 		Conn:      c,
 		service:   s,
 		createdAt: time.Now().Unix(),
 		ch:        make(chan struct{}),
 	}
-	mc.init()
-	s.wg.Add(1)
-	go s.monitorConn(mc)
-	return mc
+	ok := true
+	if s.verifyIP(mc.clientIP()) {
+		mc.init()
+		s.wg.Add(1)
+		go s.monitorConn(mc)
+	} else {
+		c.Close()
+		mc = nil
+		ok = false
+	}
+	return mc, ok
 }
 
 // Start monitor listener
@@ -176,7 +182,7 @@ func (s *Service) ReadWriteBytes() (int64, int64) {
 }
 
 // helper for montiorConn
-func (s *Service) grabConn(c *MonConn) bool {
+func (s *Service) grabConn(c *MonConn) {
 	atomic.AddInt64(&s.connCount, 1)
 	clientIP := c.clientIP()
 	// limit IPs
@@ -186,15 +192,6 @@ func (s *Service) grabConn(c *MonConn) bool {
 		}
 		atomic.StoreInt64(&s.ipCount, s.IPBucket.Count())
 	}
-	// check reject ip
-	for _, ip := range s.ipBlackList {
-		if ip == clientIP {
-			logf("S[%s] client ip: %s in blacklist, closing connection.", s.sid, clientIP)
-			c.Close()
-			return false
-		}
-	}
-	return true
 }
 
 // helper for montiorConn
@@ -214,9 +211,7 @@ func (s *Service) monitorConn(c *MonConn) {
 		s.dropConn(c)
 		s.wg.Done()
 	}()
-	if !s.grabConn(c) {
-		return
-	}
+	s.grabConn(c)
 	if Debug {
 		logf("S[%s] monitored connection: %s", s.sid, c.label)
 	}
