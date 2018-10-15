@@ -122,6 +122,9 @@ func (s *Service) Acquirable(c net.Conn) bool {
 
 // WrapMonConn wrap net.Conn return (net.Conn, ok)
 func (s *Service) WrapMonConn(c net.Conn) net.Conn {
+	if c == nil {
+		return nil
+	}
 	mc := &MonConn{
 		Conn:      c,
 		service:   s,
