@@ -73,7 +73,7 @@ func (c *MonConn) Read(b []byte) (n int, err error) {
 		c.readBytes += int64(n)
 		c.readAt = time.Now().Unix()
 		if c.service.PrintBytes {
-			logf("S[%s] %s R: %v", c.service.sid, c.label, b[:n])
+			logf("S[%s] %s R: %#v", c.service.sid, c.label, b[:n])
 		}
 	}
 	return
@@ -93,7 +93,7 @@ func (c *MonConn) Write(b []byte) (n int, err error) {
 		c.writeAt = time.Now().Unix()
 		c.bufw.Flush()
 		if c.service.PrintBytes {
-			logf("S[%s] %s W: %v", c.service.sid, c.label, b[:n])
+			logf("S[%s] %s W: %#v", c.service.sid, c.label, b[:n])
 		}
 	}
 	return
@@ -184,7 +184,7 @@ func (c *MonConn) Stats() string {
 		c.writeAt)
 }
 
-// log
+// Log ...
 func (c *MonConn) Log() string {
 	format := `sid: %s, conn: %s, r: %d, w: %d, rt: %s, wt: %s`
 	return fmt.Sprintf(format,
