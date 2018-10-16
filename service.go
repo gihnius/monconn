@@ -49,6 +49,7 @@ type Service struct {
 	ConnLimit    int64           // 0 means no limit
 	IPLimit      int64           // 0 means no limit
 	KeepAlive    bool            // keep conn alive default true
+	PrintBytes   bool            // output the read write bytes
 }
 
 // call monconn.NewService(SID) to construct
@@ -121,10 +122,8 @@ func (s *Service) Acquirable(c net.Conn) bool {
 }
 
 // WrapMonConn wrap net.Conn return (net.Conn, ok)
+// Do nil check for net.Conn before call
 func (s *Service) WrapMonConn(c net.Conn) net.Conn {
-	if c == nil {
-		return nil
-	}
 	mc := &MonConn{
 		Conn:      c,
 		service:   s,
@@ -150,7 +149,6 @@ func (s *Service) Start(ln net.Listener) {
 func (s *Service) Stop() {
 	logf("S[%s] stopping...", s.sid)
 	logf("S[%s] stats: %s", s.sid, s.Log())
-	logf("S[%s] connecting ips: %s", s.sid, s.IPBucket.Log())
 	close(s.stopCh)
 	s.wg.Wait()
 	logf("S[%s] stopped.", s.sid)
@@ -190,7 +188,7 @@ func (s *Service) grabConn(c *MonConn) {
 	// limit IPs
 	if s.IPLimit > 0 {
 		if ok := s.IPBucket.Add(clientIP); !ok {
-			logf("S[%s] Add ip %s to IPBucket failed.", s.sid, clientIP)
+			logf("S[%s] add ip %s to IPBucket failed.", s.sid, clientIP)
 		}
 		atomic.StoreInt64(&s.ipCount, s.IPBucket.Count())
 	}
@@ -219,7 +217,7 @@ func (s *Service) monitorConn(c *MonConn) {
 	}
 	if s.IdleInterval < 5 {
 		s.IdleInterval = 5
-		logf("S[%s] IdleInterval must >= 5", s.sid)
+		logf("S[%s] *IdleInterval* must >= 5", s.sid)
 	}
 	heartbeat := time.Tick(time.Second * time.Duration(s.IdleInterval))
 	for {
@@ -236,10 +234,10 @@ func (s *Service) monitorConn(c *MonConn) {
 			return
 		case <-heartbeat:
 			if c.Idle() {
-				c.Close()
 				if Debug {
 					logf("S[%s] connection idle too long: %s", s.sid, c.Log())
 				}
+				c.Close()
 				return
 			}
 			if Debug {
@@ -286,6 +284,11 @@ func (s *Service) IPCount() int64 {
 	return s.ipCount
 }
 
+// format a timestamp
+func tsFormat(ts int64) string {
+	return time.Unix(ts, 0).In(time.Local).Format(time.RFC3339)
+}
+
 // Stats output json format stats
 //     "sid": service name or id
 //     "uptime": service run time
@@ -326,8 +329,4 @@ func (s *Service) Log() string {
 		s.readBytes,
 		s.writeBytes,
 		tsFormat(s.accessAt))
-}
-
-func tsFormat(ts int64) string {
-	return time.Unix(ts, 0).In(time.Local).Format(time.RFC3339)
 }

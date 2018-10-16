@@ -24,7 +24,7 @@ func NewService(sid string) (s *Service) {
 	s = initService()
 	s.sid = sid
 	sm.store[sid] = s
-	logf("Added service %s.", sid)
+	logf("added service %s.", sid)
 	return
 }
 
