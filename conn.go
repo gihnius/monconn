@@ -12,8 +12,12 @@ import (
 
 var bufioReaderPool sync.Pool
 var bufioWriterPool sync.Pool
-var bufSizeR = 4 << 10
-var bufSizeW = 4 << 10
+
+// ReadBufSize net.Conn.Read buffer size, 4k default
+var ReadBufSize = 4 << 10
+
+// WriteBufSize net.Conn.Write buffer size, 4k default
+var WriteBufSize = 4 << 10
 
 func newBufioReader(r io.Reader) *bufio.Reader {
 	if v := bufioReaderPool.Get(); v != nil {
@@ -21,7 +25,7 @@ func newBufioReader(r io.Reader) *bufio.Reader {
 		br.Reset(r)
 		return br
 	}
-	return bufio.NewReaderSize(r, bufSizeR)
+	return bufio.NewReaderSize(r, ReadBufSize)
 }
 
 func putBufioReader(br *bufio.Reader) {
@@ -35,7 +39,7 @@ func newBufioWriter(w io.Writer) *bufio.Writer {
 		bw.Reset(w)
 		return bw
 	}
-	return bufio.NewWriterSize(w, bufSizeW)
+	return bufio.NewWriterSize(w, WriteBufSize)
 }
 
 func putBufioWriter(bw *bufio.Writer) {
