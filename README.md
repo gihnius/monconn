@@ -1,10 +1,17 @@
 # monconn
 
-A TCP connection monitor library for Go
+A TCP connection monitor library written in Go.
 
 ## About
 
 This is a library(tool) for monitoring and debugging network services.
+
+I built this for the purpose of facilitating debugging and monitoring the network connections of IoT devices. At this stage, it is just an experimental tool.
+
+Note: For each tcp connection, an additional goroutine is used for monitoring, and uses a MonConn struct to store the monitored info, which takes up a bit more memory. For 5000 long connections, it takes up about 80~100MB of memory.
+
+So it's not recommended to use it in high performance production environment.
+
 
 ## Usage
 
@@ -73,9 +80,9 @@ if err != nil {
 // there is no need to acquire connection
 // just call WrapMonConn(conn)
 if service.Acquirable(conn) {
-    // turn net.Conn into a monconn.MonConn by service.WrapMonConn()
-    // instance method
+    // wrap net.Conn with monconn.MonConn by service.WrapMonConn()
     monitoredConn := service.WrapMonConn(conn)
+    // where monitoredConn is also a net.Conn
     // handle the tcp connection
     go HandleConn(monitoredConn)
 }
@@ -88,7 +95,7 @@ monconn.Shutdown()
 
 // or pls checkout the example code in examples/
 
-// checkout the API to see how to grab the monitored infomation
+// checkout the API to see how to grab the monitored infomation.
 
 // ... that's all
 
@@ -131,6 +138,6 @@ monconn.Shutdown()
 - Stats()
 - Log()
 
-see godoc https://godoc.org/github.com/gihnius/monconn
+see [godoc](https://godoc.org/github.com/gihnius/monconn)
 
 ## License
