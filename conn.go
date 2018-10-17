@@ -77,7 +77,7 @@ func (c *MonConn) Read(b []byte) (n int, err error) {
 		c.readBytes += int64(n)
 		c.readAt = time.Now().Unix()
 		if c.service.PrintBytes {
-			logf("S[%s] R %s >>: %#v", c.service.sid, c.remoteAddr(), b[:n])
+			logf("S[%s] %s R %s >>: %#v", c.service.sid, tsFormat(c.readAt), c.remoteAddr(), b[:n])
 		}
 	}
 	return
@@ -97,7 +97,7 @@ func (c *MonConn) Write(b []byte) (n int, err error) {
 		c.writeAt = time.Now().Unix()
 		c.bufw.Flush()
 		if c.service.PrintBytes {
-			logf("S[%s] W %s <<: %#v", c.service.sid, c.remoteAddr(), b[:n])
+			logf("S[%s] %s W %s <<: %#v", c.service.sid, tsFormat(c.writeAt), c.remoteAddr(), b[:n])
 		}
 	}
 	return
