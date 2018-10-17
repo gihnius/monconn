@@ -77,7 +77,7 @@ func (c *MonConn) Read(b []byte) (n int, err error) {
 		c.readBytes += int64(n)
 		c.readAt = time.Now().Unix()
 		if c.service.PrintBytes {
-			logf("S[%s] %s R: %#v", c.service.sid, c.label, b[:n])
+			logf("S[%s] R %s >>: %#v", c.service.sid, c.remoteAddr(), b[:n])
 		}
 	}
 	return
@@ -97,7 +97,7 @@ func (c *MonConn) Write(b []byte) (n int, err error) {
 		c.writeAt = time.Now().Unix()
 		c.bufw.Flush()
 		if c.service.PrintBytes {
-			logf("S[%s] %s W: %#v", c.service.sid, c.label, b[:n])
+			logf("S[%s] W %s <<: %#v", c.service.sid, c.remoteAddr(), b[:n])
 		}
 	}
 	return
@@ -137,6 +137,13 @@ func (c *MonConn) Close() (err error) {
 	return
 }
 
+func (c *MonConn) remoteAddr() string {
+	if c.Conn != nil {
+		return c.Conn.RemoteAddr().String()
+	}
+	return ""
+}
+
 // init after construct a MonConn, call init()
 func (c *MonConn) init() {
 	if c.bufr == nil {
@@ -150,12 +157,12 @@ func (c *MonConn) init() {
 	}
 	// label format: remote_ip:remote_port <-> server_ip:server_port
 	c.label = fmt.Sprintf("%s <-> %s",
-		c.Conn.RemoteAddr().String(),
+		c.remoteAddr(),
 		c.service.ln.Addr().String())
 }
 
 func (c *MonConn) clientIP() string {
-	clientIP, _, _ := net.SplitHostPort(c.Conn.RemoteAddr().String())
+	clientIP, _, _ := net.SplitHostPort(c.remoteAddr())
 	return clientIP
 }
 
