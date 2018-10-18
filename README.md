@@ -12,6 +12,15 @@ Note: For each tcp connection, an additional goroutine is used for monitoring, a
 
 So it's not recommended to use it in high performance production environment.
 
+**features**
+
+- reject remote ip by managing an ip blacklist
+- limit ip connections
+- record upload/download traffics of all connections
+- check idle tcp connection
+- show connecting ip connections count
+- show read and write bytes(hex array) on a connection
+- gracefull stop a tcp listener
 
 ## Usage
 
