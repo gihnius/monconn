@@ -35,6 +35,7 @@ type Service struct {
 	ln           net.Listener
 	stopCh       chan struct{}
 	wg           *sync.WaitGroup
+	stopped      bool
 	ipBlackList  map[string]bool // reject connection from these client ip
 	bootAt       int64           // service start time
 	accessAt     int64           // client latest accessed(read) time
@@ -44,6 +45,7 @@ type Service struct {
 	writeBytes   int64           // connections write total bytes
 	ReadTimeout  int             // in seconds, default 10 minutes
 	WriteTimeout int             // in seconds, default 10 minutes
+	WaitTimeout  int             // timeout to wait for Close, default 1 minute
 	MaxIdle      int             // in seconds, default 15 minutes
 	IdleInterval int             // check idle every N seconds, default 15 seconds
 	ConnLimit    int64           // 0 means no limit
@@ -62,6 +64,7 @@ func initService() (s *Service) {
 		IPBucket:     &IPBucket{&sync.Map{}},
 		ReadTimeout:  600,
 		WriteTimeout: 600,
+		WaitTimeout:  60,
 		KeepAlive:    true,
 		MaxIdle:      900,
 		IdleInterval: 15,
@@ -97,6 +100,9 @@ func (s *Service) blockedIP(ip string) bool {
 // call with nil if before accepted connection
 func (s *Service) Acquirable(c net.Conn) bool {
 	yes := true
+	if s.stopped {
+		return false
+	}
 	if s.ConnLimit > 0 {
 		yes = s.connCount <= s.ConnLimit
 	}
@@ -150,17 +156,20 @@ func (s *Service) Stop() {
 	logf("S[%s] stopping...", s.sid)
 	logf("S[%s] stats: %s", s.sid, s.Log())
 	close(s.stopCh)
+	s.stopped = true
 	s.wg.Wait()
 	logf("S[%s] stopped.", s.sid)
 }
 
 // monitorListener wait listener
 func (s *Service) monitorListener() {
-	defer s.wg.Done()
+	defer func() {
+		s.wg.Done()
+		logf("S[%s] stopping listening on %s", s.sid, s.ln.Addr())
+		s.ln.Close()
+	}()
 	// wait for service Stop
 	<-s.stopCh
-	logf("S[%s] stopping listening on %s", s.sid, s.ln.Addr())
-	s.ln.Close()
 }
 
 // EliminateBytes reduce the num record of rw bytes
@@ -223,7 +232,8 @@ func (s *Service) monitorConn(c *MonConn) {
 	for {
 		select {
 		case <-s.stopCh:
-			logf("S[%s] disconnecting connection %s by service.", s.sid, c.label)
+			logf("S[%s] disconnecting connection %s in %d(s).", s.sid, c.label, s.WaitTimeout)
+			<-time.After(time.Duration(s.WaitTimeout) * time.Second)
 			c.Close()
 			return
 		case <-c.ch:

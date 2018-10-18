@@ -51,6 +51,8 @@ monconn.MaxIPLimit = 1000
 // set net.Conn read write timeout
 service.ReadTimeout = 600
 service.WriteTimeout = 600
+// close wait timeout
+service.WaitTimeout = 60
 // max idle check in seconds
 service.MaxIdle = 900
 // connections count to a service, default 0, no limit
