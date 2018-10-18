@@ -61,7 +61,7 @@ func initService() (s *Service) {
 		stopCh:       make(chan struct{}),
 		wg:           &sync.WaitGroup{},
 		ipBlackList:  map[string]bool{},
-		IPBucket:     &IPBucket{&sync.Map{}},
+		IPBucket:     &IPBucket{&sync.Map{}, MaxIPLimit},
 		ReadTimeout:  600,
 		WriteTimeout: 600,
 		WaitTimeout:  60,
@@ -305,8 +305,8 @@ func tsFormat(ts int64) string {
 //     "ips": connecting ips
 //     "connections": connections count
 //     "accessed": client latest accessed time
-//     "up": client upload
-//     "down": client download
+//     "up": client uploaded bytes
+//     "down": client downloaded bytes
 func (s *Service) Stats() string {
 	format := `
 {

@@ -12,11 +12,12 @@ var MaxIPLimit int64 = 64
 // IPBucket key value cache for ip <-> connections
 type IPBucket struct {
 	ips *sync.Map
+	max int64
 }
 
 // Add simple Set operates on IPBucket
 func (b *IPBucket) Add(ip string) (ok bool) {
-	if b.Count() > MaxIPLimit {
+	if b.Count() > b.max {
 		ok = false
 		return
 	}
