@@ -151,4 +151,11 @@ monconn.Shutdown()
 
 see [godoc](https://godoc.org/github.com/gihnius/monconn)
 
+## TODO
+
+- a session wrapper
+- a command line use for port forwarding and monitor the backend
+- improve logger
+
+
 ## License
