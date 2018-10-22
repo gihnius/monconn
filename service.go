@@ -31,18 +31,14 @@ func logf(format string, args ...interface{}) {
 // Service monitor listener and all of connections
 type Service struct {
 	*IPBucket
+	sync.Mutex
+	stats
 	sid          string
 	ln           net.Listener
 	stopCh       chan struct{}
-	wg           *sync.WaitGroup
 	stopped      bool
+	wg           *sync.WaitGroup
 	ipBlackList  map[string]bool // reject connection from these client ip
-	bootAt       int64           // service start time
-	accessAt     int64           // client latest accessed(read) time
-	connCount    int64           // current connections count
-	ipCount      int64           // current connecting ips count
-	readBytes    int64           // connections read total bytes
-	writeBytes   int64           // connections write total bytes
 	ReadTimeout  int             // in seconds, default 10 minutes
 	WriteTimeout int             // in seconds, default 10 minutes
 	WaitTimeout  int             // timeout to wait for Close, default 1 minute
@@ -54,6 +50,17 @@ type Service struct {
 	PrintBytes   bool            // output the read write bytes
 }
 
+type stats struct {
+	accepted   int64 // all wrapped connections count
+	dropped    int64 // not acquirable count
+	bootAt     int64 // service start time
+	accessAt   int64 // client latest accessed(read) time
+	connCount  int64 // active connections count
+	ipCount    int64 // active connecting ips count
+	readBytes  int64 // connections read total bytes
+	writeBytes int64 // connections write total bytes
+}
+
 // call monconn.NewService(SID) to construct
 // and mondify exported attrs from returned instance
 func initService() (s *Service) {
@@ -61,6 +68,7 @@ func initService() (s *Service) {
 		stopCh:       make(chan struct{}),
 		wg:           &sync.WaitGroup{},
 		ipBlackList:  map[string]bool{},
+		stats:        stats{},
 		IPBucket:     &IPBucket{&sync.Map{}, MaxIPLimit},
 		ReadTimeout:  600,
 		WriteTimeout: 600,
@@ -74,6 +82,8 @@ func initService() (s *Service) {
 
 // RejectIP add (client) ip(s) to blacklist
 func (s *Service) RejectIP(ip ...string) {
+	s.Lock()
+	defer s.Unlock()
 	for _, addr := range ip {
 		s.ipBlackList[addr] = true
 	}
@@ -82,6 +92,8 @@ func (s *Service) RejectIP(ip ...string) {
 
 // ReleaseIP remove ip from blacklist
 func (s *Service) ReleaseIP(ip ...string) {
+	s.Lock()
+	defer s.Unlock()
 	for _, addr := range ip {
 		if _, ok := s.ipBlackList[addr]; ok {
 			delete(s.ipBlackList, addr)
@@ -92,6 +104,8 @@ func (s *Service) ReleaseIP(ip ...string) {
 
 // check reject ip
 func (s *Service) blockedIP(ip string) bool {
+	s.Lock()
+	defer s.Unlock()
 	_, ok := s.ipBlackList[ip]
 	return ok
 }
@@ -114,15 +128,14 @@ func (s *Service) Acquirable(c net.Conn) bool {
 		if s.blockedIP(clientIP) {
 			logf("S[%s] client ip: %s is blocked!.", s.sid, clientIP)
 			c.Close()
-			return false
+			yes = false
 		}
 	}
-	if Debug && !yes {
-		logf("S[%s] acquire connection failed: %d(ip) and %d(conn). %s",
-			s.sid,
-			s.ipCount,
-			s.connCount,
-			s.IPBucket.Log())
+	if !yes {
+		atomic.AddInt64(&s.dropped, 1)
+		if Debug {
+			logf("S[%s] acquire connection failed!", s.sid)
+		}
 	}
 	return yes
 }
@@ -193,9 +206,10 @@ func (s *Service) ReadWriteBytes() (int64, int64) {
 // helper for montiorConn
 func (s *Service) grabConn(c *MonConn) {
 	atomic.AddInt64(&s.connCount, 1)
-	clientIP := c.clientIP()
+	atomic.AddInt64(&s.accepted, 1)
 	// limit IPs
 	if s.IPLimit > 0 {
+		clientIP := c.clientIP()
 		if ok := s.IPBucket.Add(clientIP); !ok {
 			logf("S[%s] add ip %s to IPBucket failed.", s.sid, clientIP)
 		}
