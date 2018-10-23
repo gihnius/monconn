@@ -87,7 +87,7 @@ func (s *Service) RejectIP(ip ...string) {
 	for _, addr := range ip {
 		s.ipBlackList[addr] = true
 	}
-	logf("added ip:%v to blacklist", s.ipBlackList)
+	logf("added ip:%v to blacklist", ip)
 }
 
 // ReleaseIP remove ip from blacklist

@@ -1,10 +1,10 @@
 # monconn
 
-A TCP connection monitor library written in Go.
+A TCP connection monitoring tool written in Go.
 
 ## About
 
-This is a library(tool) for monitoring and debugging network services.
+This is a tool(a library and a command line) for monitoring and debugging network services.
 
 I built this for the purpose of facilitating debugging and monitoring the network connections of IoT devices. At this stage, it is just an experimental tool.
 
@@ -26,9 +26,19 @@ So it's not recommended to use it in high performance production environment.
 
 ### Install
 
+library:
+
 `go get -u -v github.com/gihnius/monconn`
 
+command line:
+
+`go get -u -v github.com/gihnius/monconn/cli/monconn`
+
+then run: `monconn -h`
+
 ### Configuration
+
+#### for library
 
 ``` go
 import "github.com/gihnius/monconn"
@@ -63,6 +73,36 @@ service.IPLimit = 0
 service.KeepAlive = true
 // Print read write bytes in hex format, default false
 service.PrintBytes = false
+
+```
+
+#### for command line
+
+please checkout `monconn/cli/monconn/config.yaml`.
+
+``` yaml
+# monconn config.yaml
+service_1: # service name
+  # service listen on
+  listen_ip: "127.0.0.1"
+  # monconn listen on 80
+  listen_port: 80
+  # forward requests to this backend
+  backend_ip: "127.0.0.1"
+  # the real web listen on 8080
+  backend_port: 8080
+  # service config
+  read_timeout: 600 # 10 minutes
+  write_timeout: 600 # 10 minutes
+  wait_timeout: 60 # 1 minute
+  max_idle: 900 # 15 minutes
+  conn_limit: 0 # zero means no limit
+  ip_limit: 0 # zero means no limit
+  keepalive: true
+  print_bytes: true
+  ip_blacklist:
+    - 1.1.1.1
+    - 2.2.2.2
 
 ```
 
