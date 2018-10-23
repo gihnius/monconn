@@ -156,6 +156,7 @@ see [godoc](https://godoc.org/github.com/gihnius/monconn)
 - a session wrapper
 - a command line use for port forwarding and monitor the backend
 - improve logger
+- Implement ReadFrom and WriteTo methods
 
 
 ## License
