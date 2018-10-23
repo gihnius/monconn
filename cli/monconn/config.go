@@ -103,9 +103,10 @@ func (c *config) setDefault(sv *monconn.Service) {
 		sv.IPLimit = c.IPLimit
 	}
 	if !c.KeepAlive {
+		// default true
 		sv.KeepAlive = c.KeepAlive
 	}
-	if !c.PrintBytes {
+	if c.PrintBytes {
 		sv.PrintBytes = c.PrintBytes
 	}
 	if len(c.IPBlackList) > 0 {
