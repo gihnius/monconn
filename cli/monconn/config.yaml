@@ -1,0 +1,33 @@
+service_1:
+  listen_ip: "127.0.0.1"
+  listen_port: 1234
+  backend_ip: "127.0.0.1"
+  backend_port: 22
+  read_timeout: 600
+  write_timeout: 600
+  wait_timeout: 60
+  max_idle: 900
+  conn_limit: 0
+  ip_limit: 0
+  keepalive: true
+  print_bytes: true
+  ip_blacklist:
+    - 1.1.1.1
+    - 2.2.2.2
+
+service_2:
+  listen_ip: "127.0.0.1"
+  listen_port: 2345
+  backend_ip: "127.0.0.1"
+  backend_port: 80
+  read_timeout: 600
+  write_timeout: 600
+  wait_timeout: 60
+  max_idle: 900
+  conn_limit: 0
+  ip_limit: 0
+  keepalive: true
+  print_bytes: false
+  ip_blacklist:
+    - 1.1.1.1
+    - 2.2.2.2
