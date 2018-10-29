@@ -247,11 +247,13 @@ func (s *Service) monitorConn(c *MonConn) {
 		select {
 		case <-s.stopCh:
 			logf("S[%s] disconnecting connection %s in %d(s).", s.sid, c.label, s.WaitTimeout)
-			<-time.After(time.Duration(s.WaitTimeout) * time.Second)
-			c.Close()
+			if !c.closed {
+				<-time.After(time.Duration(s.WaitTimeout) * time.Second)
+				c.Close()
+			}
 			return
 		case <-c.ch:
-			// quit monitor by c.Close() proactive call
+			// quit monitor by c.Close() proactive/auto call
 			if Debug {
 				logf("S[%s] connection %s monitor finished.", s.sid, c.label)
 			}
