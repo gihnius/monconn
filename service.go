@@ -198,7 +198,7 @@ func (s *Service) EliminateBytes(r, w int64) {
 
 // ReadWriteBytes return number of read and write bytes
 func (s *Service) ReadWriteBytes() (int64, int64) {
-	return s.readBytes, s.writeBytes
+	return atomic.LoadInt64(&s.readBytes), atomic.LoadInt64(&s.writeBytes)
 }
 
 // helper for montiorConn

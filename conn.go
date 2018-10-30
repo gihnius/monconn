@@ -212,7 +212,8 @@ func (c *MonConn) updateService() {
 	atomic.AddInt64(&c.service.readBytes, c.readBytes)
 	atomic.AddInt64(&c.service.writeBytes, c.writeBytes)
 	// log client access time
-	if c.service.accessAt < c.readAt {
+	last := atomic.LoadInt64(&c.service.accessAt)
+	if last < c.readAt {
 		atomic.StoreInt64(&c.service.accessAt, c.readAt)
 	}
 	if Debug {
