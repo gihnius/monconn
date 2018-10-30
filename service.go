@@ -104,8 +104,6 @@ func (s *Service) ReleaseIP(ip ...string) {
 
 // check reject ip
 func (s *Service) blockedIP(ip string) bool {
-	s.Lock()
-	defer s.Unlock()
 	_, ok := s.ipBlackList[ip]
 	return ok
 }
