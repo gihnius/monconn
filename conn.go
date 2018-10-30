@@ -14,10 +14,10 @@ var bufioReaderPool sync.Pool
 var bufioWriterPool sync.Pool
 
 // ReadBufSize net.Conn.Read buffer size, 4k default
-var ReadBufSize = 4 << 10
+var ReadBufSize = 4096
 
 // WriteBufSize net.Conn.Write buffer size, 4k default
-var WriteBufSize = 4 << 10
+var WriteBufSize = 4096
 
 func newBufioReader(r io.Reader) *bufio.Reader {
 	if v := bufioReaderPool.Get(); v != nil {

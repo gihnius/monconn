@@ -246,7 +246,7 @@ func (s *Service) monitorConn(c *MonConn) {
 		case <-s.stopCh:
 			logf("S[%s] disconnecting connection %s in %d(s).", s.sid, c.label, s.WaitTimeout)
 			if !c.closed {
-				<-time.After(time.Duration(s.WaitTimeout) * time.Second)
+				time.Sleep(time.Duration(s.WaitTimeout) * time.Second)
 				c.Close()
 			}
 			return
@@ -311,6 +311,16 @@ func (s *Service) IPCount() int64 {
 // format a timestamp
 func tsFormat(ts int64) string {
 	return time.Unix(ts, 0).In(time.Local).Format(time.RFC3339)
+}
+
+// ResetStats ...
+func ResetStats() {
+
+}
+
+// LoadStats ...
+func LoadStats() {
+
 }
 
 // Stats output json format stats
