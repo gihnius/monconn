@@ -79,3 +79,31 @@ func (b *IPBucket) Log() string {
 	})
 	return buffer.String()
 }
+
+// RejectIP add (client) ip(s) to blacklist
+func (s *Service) RejectIP(ip ...string) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	for _, addr := range ip {
+		s.ipBlackList[addr] = true
+	}
+	logf("added ip:%v to blacklist", ip)
+}
+
+// ReleaseIP remove ip from blacklist
+func (s *Service) ReleaseIP(ip ...string) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	for _, addr := range ip {
+		if _, ok := s.ipBlackList[addr]; ok {
+			delete(s.ipBlackList, addr)
+		}
+	}
+	logf("removed ip:%v from blacklist", ip)
+}
+
+// check reject ip
+func (s *Service) blockedIP(ip string) bool {
+	_, ok := s.ipBlackList[ip]
+	return ok
+}

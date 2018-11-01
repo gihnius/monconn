@@ -42,7 +42,7 @@ func DelService(sid string) {
 	defer sm.Unlock()
 	if s, ok := sm.store[sid]; ok {
 		delete(sm.store, sid)
-		s.Stop()
+		s.Close()
 		logf("deleted service %s.", sid)
 	}
 }
@@ -72,6 +72,6 @@ func IPs() string {
 // Shutdown stop all services
 func Shutdown() {
 	for _, s := range sm.store {
-		s.Stop()
+		s.Close()
 	}
 }

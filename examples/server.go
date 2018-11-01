@@ -24,15 +24,15 @@ func server() {
 	sv.PrintBytes = true
 
 	fmt.Println("Launching server...")
-	ln, _ := net.Listen("tcp", "127.0.0.1:1234")
 	// start monitor listener
-	sv.Start(ln)
+	sv.Listen("tcp", "127.0.0.1:1234")
 	for {
-		conn, _ := ln.Accept()
+		conn, err := sv.Accept()
 		// main call, monitor incomming connection
-		if conn != nil && sv.Acquirable(conn) {
-			go handleConn(sv.WrapMonConn(conn))
+		if err != nil {
+			break
 		}
+		go handleConn(conn)
 	}
 }
 
@@ -54,7 +54,7 @@ func handleConn(c net.Conn) {
 func main() {
 	go server()
 	time.Sleep(20 * time.Second)
-	sv.Stop()
+	sv.Close()
 	select {}
 }
 

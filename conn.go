@@ -118,9 +118,7 @@ func (c *MonConn) finalFlush() {
 // Close close once
 func (c *MonConn) Close() (err error) {
 	c.mutex.Lock()
-	defer func() {
-		c.mutex.Unlock()
-	}()
+	defer c.mutex.Unlock()
 	if !c.closed {
 		c.finalFlush()
 		err = c.Conn.Close()

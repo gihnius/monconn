@@ -28,15 +28,37 @@ func logf(format string, args ...interface{}) {
 	}
 }
 
+// try listen for service restart
+func tryListen(network, addr string) (ln net.Listener, err error) {
+	try := func() error {
+		ln, err = net.Listen(network, addr)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+	// simple backoff, retry 3 times
+	for i := 1; i <= 3; i++ {
+		err = try()
+		if err == nil {
+			break
+		} else {
+			dur := time.Duration(i*500) * time.Millisecond
+			time.Sleep(dur)
+		}
+	}
+	return
+}
+
 // Service monitor listener and all of connections
 type Service struct {
 	*IPBucket
-	sync.Mutex
 	stats
 	sid          string
 	ln           net.Listener
 	stopCh       chan struct{}
 	stopped      bool
+	mutex        sync.Mutex
 	wg           *sync.WaitGroup
 	ipBlackList  map[string]bool // reject connection from these client ip
 	ReadTimeout  int             // in seconds, default 10 minutes
@@ -44,8 +66,9 @@ type Service struct {
 	WaitTimeout  int             // timeout to wait for Close, default 1 minute
 	MaxIdle      int             // in seconds, default 15 minutes
 	IdleInterval int             // check idle every N seconds, default 15 seconds
-	ConnLimit    int64           // 0 means no limit
-	IPLimit      int64           // 0 means no limit
+	ConnLimit    int             // 0 means no limit
+	IPLimit      int             // 0 means no limit
+	LimitTimeout int             // block seconds when got limited, default 0
 	KeepAlive    bool            // keep conn alive default true
 	PrintBytes   bool            // output the read write bytes
 }
@@ -80,59 +103,55 @@ func initService() (s *Service) {
 	return
 }
 
-// RejectIP add (client) ip(s) to blacklist
-func (s *Service) RejectIP(ip ...string) {
-	s.Lock()
-	defer s.Unlock()
-	for _, addr := range ip {
-		s.ipBlackList[addr] = true
-	}
-	logf("added ip:%v to blacklist", ip)
-}
-
-// ReleaseIP remove ip from blacklist
-func (s *Service) ReleaseIP(ip ...string) {
-	s.Lock()
-	defer s.Unlock()
-	for _, addr := range ip {
-		if _, ok := s.ipBlackList[addr]; ok {
-			delete(s.ipBlackList, addr)
+func (s *Service) Accept() (net.Conn, error) {
+	conn, err := s.ln.Accept()
+	if err == nil {
+		if s.acquirable(conn) {
+			conn = s.WrapMonConn(conn)
+		} else {
+			if s.LimitTimeout > 0 {
+				time.Sleep(time.Duration(s.LimitTimeout) * time.Second)
+			}
+			err = fmt.Errorf("S[%s] can not acquire new connections.", s.sid)
+			return nil, err
 		}
 	}
-	logf("removed ip:%v from blacklist", ip)
+	return conn, err
 }
 
-// check reject ip
-func (s *Service) blockedIP(ip string) bool {
-	_, ok := s.ipBlackList[ip]
-	return ok
-}
-
-// Acquirable check ConnLimit or IPLimit if exceed
+// acquirable check ConnLimit or IPLimit if exceed
 // call with nil if before accepted connection
-func (s *Service) Acquirable(c net.Conn) bool {
-	yes := true
+func (s *Service) acquirable(c net.Conn) (yes bool) {
+	yes = true
+	defer func() {
+		if !yes {
+			atomic.AddInt64(&s.dropped, 1)
+			if c != nil {
+				c.Close()
+			}
+			if Debug {
+				logf("S[%s] acquire connection failed!", s.sid)
+			}
+		}
+	}()
 	if s.stopped {
 		return false
 	}
 	if s.ConnLimit > 0 {
-		yes = s.connCount <= s.ConnLimit
+		yes = s.connCount <= int64(s.ConnLimit)
+		return yes
 	}
-	if yes && s.IPLimit > 0 {
-		yes = s.ipCount <= s.IPLimit
-	}
-	if c != nil {
+	if c != nil && yes {
 		clientIP, _, _ := net.SplitHostPort(c.RemoteAddr().String())
-		if s.blockedIP(clientIP) {
-			logf("S[%s] client ip: %s is blocked!.", s.sid, clientIP)
-			c.Close()
-			yes = false
+		if len(s.ipBlackList) > 0 {
+			if s.blockedIP(clientIP) {
+				logf("S[%s] client ip: %s is blocked!.", s.sid, clientIP)
+				yes = false
+			}
 		}
-	}
-	if !yes {
-		atomic.AddInt64(&s.dropped, 1)
-		if Debug {
-			logf("S[%s] acquire connection failed!", s.sid)
+		if yes && s.IPLimit > 0 && s.ipCount > int64(s.IPLimit) {
+			// ip count limited, reject new ip
+			yes = s.IPBucket.Contains(clientIP)
 		}
 	}
 	return yes
@@ -153,23 +172,32 @@ func (s *Service) WrapMonConn(c net.Conn) net.Conn {
 	return mc
 }
 
-// Start monitor listener
-func (s *Service) Start(ln net.Listener) {
-	s.ln = ln
+// Listen start monitor listener
+func (s *Service) Listen(network, addr string) (err error) {
+	s.ln, err = tryListen(network, addr)
+	if err != nil {
+		logf("S[%s] service try to listen %s failed.", addr)
+		return err
+	}
 	s.wg.Add(1)
 	go s.monitorListener()
 	s.bootAt = time.Now().Unix()
 	s.accessAt = s.bootAt
+	return
 }
 
-// Stop stop the listener and close all of connections
-func (s *Service) Stop() {
-	logf("S[%s] stopping...", s.sid)
-	logf("S[%s] stats: %s", s.sid, s.Log())
-	close(s.stopCh)
-	s.stopped = true
-	s.wg.Wait()
-	logf("S[%s] stopped.", s.sid)
+// Close stop the listener and close all of connections
+func (s *Service) Close() {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if !s.stopped {
+		logf("S[%s] stopping service...", s.sid)
+		logf("S[%s] stats: %s", s.sid, s.Log())
+		close(s.stopCh)
+		s.stopped = true
+		s.wg.Wait()
+		logf("S[%s] stopped.", s.sid)
+	}
 }
 
 // monitorListener wait listener
@@ -244,7 +272,10 @@ func (s *Service) monitorConn(c *MonConn) {
 	for {
 		select {
 		case <-s.stopCh:
-			logf("S[%s] disconnecting connection %s in %d(s).", s.sid, c.label, s.WaitTimeout)
+			logf("S[%s] disconnecting connection %s in %d(s).",
+				s.sid,
+				c.label,
+				s.WaitTimeout)
 			if !c.closed {
 				time.Sleep(time.Duration(s.WaitTimeout) * time.Second)
 				c.Close()
@@ -314,13 +345,9 @@ func tsFormat(ts int64) string {
 }
 
 // ResetStats ...
-func ResetStats() {
-
-}
-
-// LoadStats ...
-func LoadStats() {
-
+func (s *Service) ResetStats() {
+	st := stats{bootAt: s.bootAt, accessAt: s.accessAt}
+	s.stats = st
 }
 
 // Stats output json format stats

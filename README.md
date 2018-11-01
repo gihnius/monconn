@@ -80,6 +80,17 @@ service.PrintBytes = false
 
 please checkout `monconn/cli/monconn/config.yaml`.
 
+simple usage as a port forwarder:
+
+``` shell
+# use as ssh and web frontend to monitor traffics
+$ monconn -p :22=127.0.0.1:2222 -p 0.0.0.0:80=127.0.0.1:8080
+# here 2222 and 8080 are the real ssh and web services
+
+```
+
+more configurable options:
+
 ``` yaml
 # monconn config.yaml
 service_1: # service name
@@ -117,30 +128,20 @@ service := monconn.NewService("127.0.0.1:1234")
 // configure service like above
 // service.ReadTimeout = ...
 // listen a tcp port
-ln, _ := net.Listen("tcp", "127.0.0.1:1234")
 // start the service monitor on ln
-service.Start(ln)
+service.Listen("tcp", "127.0.0.1:1234")
 
 // accept connection and monitor the connection
-conn, err := ln.Accept(
+conn, err := service.Accept()
 if err != nil {
     // handle err
-}
-// acquire the connection
-// if no ip or connection limits or ip blacklist provided
-// there is no need to acquire connection
-// just call WrapMonConn(conn)
-if service.Acquirable(conn) {
-    // wrap net.Conn with monconn.MonConn by service.WrapMonConn()
-    monitoredConn := service.WrapMonConn(conn)
-    // where monitoredConn is also a net.Conn
-    // handle the tcp connection
-    go HandleConn(monitoredConn)
+} else {
+    go HandleConn(conn)
 }
 
 // when everything done, usually before program exit,
 // call service.Stop() to stop the listener as well as service
-service.Stop()
+service.Close()
 // or call Shutdown() to Stop all services if there are multiple started.
 monconn.Shutdown()
 
@@ -167,10 +168,10 @@ monconn.Shutdown()
 
 - RejectIP(ip) add ip to blacklist
 - ReleaseIP(ip) remove ip from blacklist
-- Acquirable() check if continue to monitor new conection
+- Listen() start monitor the listener
+- Accept() check if continue to monitor new conection
+- Close() stop service
 - WrapMonConn()
-- Start() start monitor the listener
-- Stop()
 - EliminateBytes(r, w) see godoc
 - ReadWriteBytes() return how many bytes read or write in a service
 - IPs() service's connecting ip
@@ -194,9 +195,11 @@ see [godoc](https://godoc.org/github.com/gihnius/monconn)
 ## TODO
 
 - a session wrapper
-- a command line use for port forwarding and monitor the backend
 - improve logger
 - Implement ReadFrom and WriteTo methods
 
+## Status
+
+In development (alpha).
 
 ## License
