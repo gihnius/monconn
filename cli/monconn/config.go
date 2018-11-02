@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
-	"net"
 	"os"
 	"strings"
 	"time"
@@ -22,8 +21,8 @@ type config struct {
 	WriteTimeout int      `yaml:"write_timeout"`
 	WaitTimeout  int      `yaml:"wait_timeout"`
 	MaxIdle      int      `yaml:"max_idle"`
-	ConnLimit    int64    `yaml:"conn_limit"`
-	IPLimit      int64    `yaml:"ip_limit"`
+	ConnLimit    int      `yaml:"conn_limit"`
+	IPLimit      int      `yaml:"ip_limit"`
 	KeepAlive    bool     `yaml:"keepalive"`
 	PrintBytes   bool     `yaml:"print_bytes"`
 	IPBlackList  []string `yaml:"ip_blacklist"`
@@ -60,16 +59,15 @@ func (a *config) backendAddr() string {
 }
 
 func (c *config) launchService() {
-	ln, err := net.Listen("tcp", c.listenAddr())
+	sv := monconn.NewService(c.listenAddr())
+	c.setDefault(sv)
+	err := sv.Listen("tcp", c.listenAddr())
 	if err != nil {
 		fmt.Printf("Failed to listen on %s\n", c.listenAddr())
 		return
 	}
-	sv := monconn.NewService(c.listenAddr())
-	c.setDefault(sv)
-	sv.Start(ln)
 	for {
-		conn, err := ln.Accept()
+		conn, err := sv.Accept()
 		if err != nil {
 			if strings.Contains(err.Error(), "use of closed network connection") {
 				return
@@ -77,9 +75,7 @@ func (c *config) launchService() {
 			time.Sleep(1 * time.Second)
 			continue
 		}
-		if conn != nil && sv.Acquirable(conn) {
-			go handleConn(sv.WrapMonConn(conn), c.backendAddr())
-		}
+		go handleConn(conn, c.backendAddr())
 	}
 }
 
