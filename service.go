@@ -103,6 +103,7 @@ func initService() (s *Service) {
 	return
 }
 
+// Accept new connection and wrap in MonConn
 func (s *Service) Accept() (net.Conn, error) {
 	conn, err := s.ln.Accept()
 	if err == nil {
@@ -112,7 +113,7 @@ func (s *Service) Accept() (net.Conn, error) {
 			if s.LimitTimeout > 0 {
 				time.Sleep(time.Duration(s.LimitTimeout) * time.Second)
 			}
-			err = fmt.Errorf("S[%s] can not acquire new connections.", s.sid)
+			err = fmt.Errorf("S[%s] can not acquire new connections", s.sid)
 			return nil, err
 		}
 	}
