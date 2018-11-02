@@ -67,7 +67,7 @@ func (c *config) launchService() {
 		return
 	}
 	for {
-		conn, err := sv.Accept()
+		conn, err := sv.AcquireConn()
 		if err != nil {
 			if strings.Contains(err.Error(), "use of closed network connection") {
 				return

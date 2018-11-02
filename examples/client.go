@@ -16,6 +16,7 @@ func client(wg *sync.WaitGroup) {
 	c := clientConn()
 	defer func() {
 		c.Close()
+		fmt.Println("connection closed:", c.LocalAddr())
 		wg.Done()
 	}()
 	if c == nil {
@@ -38,14 +39,16 @@ func client(wg *sync.WaitGroup) {
 		} else {
 			// fmt.Print("received from server:", string(buf[:n]))
 		}
-		time.Sleep(1 * time.Second)
+		time.Sleep(5 * time.Second)
+		return
 	}
 }
 
 func main() {
 	wg := &sync.WaitGroup{}
-	for i := 0; i <= 10; i++ {
+	for i := 0; i <= 1000; i++ {
 		wg.Add(1)
+		// time.Sleep(time.Second)
 		go client(wg)
 	}
 	wg.Wait()

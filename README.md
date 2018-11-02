@@ -66,7 +66,7 @@ service.WaitTimeout = 60
 // max idle check in seconds
 service.MaxIdle = 900
 // connections count to a service, default 0, no limit
-service.ConnLimit = 0
+service.ConnLimit = 0 // ConnLimit changes need to restart service
 // ips count to service, default 0, no limit
 service.IPLimit = 0
 // set tcp connection keepalive, default true
@@ -132,7 +132,7 @@ service := monconn.NewService("127.0.0.1:1234")
 service.Listen("tcp", "127.0.0.1:1234")
 
 // accept connection and monitor the connection
-conn, err := service.Accept()
+conn, err := service.AcquireConn()
 if err != nil {
     // handle err
 } else {
@@ -160,8 +160,6 @@ monconn.Shutdown()
 - NewService(sid) to create a service
 - GetService(sid) get service by sid
 - DelService(sid) delete a service
-- TotalConns() total connections count for live services
-- IPs() all connecting client ips, return as comma-seperated string
 - Shutdown() Stop all services
 
 ### Service instance method
@@ -169,7 +167,7 @@ monconn.Shutdown()
 - RejectIP(ip) add ip to blacklist
 - ReleaseIP(ip) remove ip from blacklist
 - Listen() start monitor the listener
-- Accept() check if continue to monitor new conection
+- AcquireConn() return monitored new connection
 - Close() stop service
 - WrapMonConn()
 - EliminateBytes(r, w) see godoc

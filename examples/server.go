@@ -14,23 +14,24 @@ func server() {
 	monconn.Debug = true // enable debug logging
 	// service OPTIONAL settings
 	// reset within the service life cycle, will affect new connections
-	sv.ReadTimeout = 120 // default 600 (10 minutes)
-	sv.WriteTimeout = 60 // default 600 (10 minutes)
-	sv.MaxIdle = 60      // default 900 (15 minutes)
-	sv.KeepAlive = false // default true
-	// sv.ConnLimit = 10                 // limit up to 10 concurrency connections
-	// sv.IPLimit = 5                    // limit up to 5 concurrency client ips
+	sv.ReadTimeout = 120              // default 600 (10 minutes)
+	sv.WriteTimeout = 60              // default 600 (10 minutes)
+	sv.MaxIdle = 60                   // default 900 (15 minutes)
+	sv.KeepAlive = false              // default true
+	sv.ConnLimit = 10                 // limit up to 10 concurrency connections
+	sv.IPLimit = 5                    // limit up to 5 concurrency client ips
 	sv.RejectIP("1.2.3.4", "5.6.7.8") // add ip to blacklist
-	sv.PrintBytes = true
+	// sv.PrintBytes = true
 
 	fmt.Println("Launching server...")
 	// start monitor listener
 	sv.Listen("tcp", "127.0.0.1:1234")
 	for {
-		conn, err := sv.Accept()
+		conn, err := sv.AcquireConn()
 		// main call, monitor incomming connection
 		if err != nil {
-			break
+			time.Sleep(time.Second)
+			continue
 		}
 		go handleConn(conn)
 	}
@@ -53,7 +54,7 @@ func handleConn(c net.Conn) {
 
 func main() {
 	go server()
-	time.Sleep(20 * time.Second)
+	time.Sleep(200 * time.Second)
 	sv.Close()
 	select {}
 }

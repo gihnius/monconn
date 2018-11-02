@@ -8,6 +8,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"golang.org/x/net/netutil"
 )
 
 // Debug debuging messages toggle
@@ -68,13 +70,12 @@ type Service struct {
 	IdleInterval int             // check idle every N seconds, default 15 seconds
 	ConnLimit    int             // 0 means no limit
 	IPLimit      int             // 0 means no limit
-	LimitTimeout int             // block seconds when got limited, default 0
 	KeepAlive    bool            // keep conn alive default true
 	PrintBytes   bool            // output the read write bytes
 }
 
 type stats struct {
-	accepted   int64 // all wrapped connections count
+	accepted   int64 // all wrapped/monitored connections count
 	dropped    int64 // not acquirable count
 	bootAt     int64 // service start time
 	accessAt   int64 // client latest accessed(read) time
@@ -82,7 +83,16 @@ type stats struct {
 	ipCount    int64 // active connecting ips count
 	readBytes  int64 // connections read total bytes
 	writeBytes int64 // connections write total bytes
+	counterCh  chan int
 }
+
+// counterCh enum
+const (
+	countAccept int = iota
+	countDrop
+	countConn
+	countConnDone
+)
 
 // call monconn.NewService(SID) to construct
 // and mondify exported attrs from returned instance
@@ -91,7 +101,7 @@ func initService() (s *Service) {
 		stopCh:       make(chan struct{}),
 		wg:           &sync.WaitGroup{},
 		ipBlackList:  map[string]bool{},
-		stats:        stats{},
+		stats:        stats{counterCh: make(chan int, 1024)},
 		IPBucket:     &IPBucket{&sync.Map{}, MaxIPLimit},
 		ReadTimeout:  600,
 		WriteTimeout: 600,
@@ -103,16 +113,13 @@ func initService() (s *Service) {
 	return
 }
 
-// Accept new connection and wrap in MonConn
-func (s *Service) Accept() (net.Conn, error) {
+// AcquireConn accept new connection and wrap in MonConn
+func (s *Service) AcquireConn() (net.Conn, error) {
 	conn, err := s.ln.Accept()
 	if err == nil {
 		if s.acquirable(conn) {
 			conn = s.WrapMonConn(conn)
 		} else {
-			if s.LimitTimeout > 0 {
-				time.Sleep(time.Duration(s.LimitTimeout) * time.Second)
-			}
 			err = fmt.Errorf("S[%s] can not acquire new connections", s.sid)
 			return nil, err
 		}
@@ -120,16 +127,15 @@ func (s *Service) Accept() (net.Conn, error) {
 	return conn, err
 }
 
-// acquirable check ConnLimit or IPLimit if exceed
-// call with nil if before accepted connection
+// acquirable check ip blacklist and ip count
 func (s *Service) acquirable(c net.Conn) (yes bool) {
 	yes = true
 	defer func() {
 		if !yes {
-			atomic.AddInt64(&s.dropped, 1)
 			if c != nil {
 				c.Close()
 			}
+			s.counterCh <- countDrop
 			if Debug {
 				logf("S[%s] acquire connection failed!", s.sid)
 			}
@@ -137,10 +143,6 @@ func (s *Service) acquirable(c net.Conn) (yes bool) {
 	}()
 	if s.stopped {
 		return false
-	}
-	if s.ConnLimit > 0 {
-		yes = s.connCount <= int64(s.ConnLimit)
-		return yes
 	}
 	if c != nil && yes {
 		clientIP, _, _ := net.SplitHostPort(c.RemoteAddr().String())
@@ -150,9 +152,12 @@ func (s *Service) acquirable(c net.Conn) (yes bool) {
 				yes = false
 			}
 		}
-		if yes && s.IPLimit > 0 && s.ipCount > int64(s.IPLimit) {
-			// ip count limited, reject new ip
-			yes = s.IPBucket.Contains(clientIP)
+		if yes && s.IPLimit > 0 {
+			ipCount := atomic.LoadInt64(&s.ipCount)
+			if ipCount > int64(s.IPLimit) {
+				// ip count limited, reject new ip
+				yes = s.IPBucket.Contains(clientIP)
+			}
 		}
 	}
 	return yes
@@ -175,10 +180,15 @@ func (s *Service) WrapMonConn(c net.Conn) net.Conn {
 
 // Listen start monitor listener
 func (s *Service) Listen(network, addr string) (err error) {
-	s.ln, err = tryListen(network, addr)
+	ln, err := tryListen(network, addr)
 	if err != nil {
 		logf("S[%s] service try to listen %s failed.", addr)
 		return err
+	}
+	if s.ConnLimit > 0 {
+		s.ln = netutil.LimitListener(ln, s.ConnLimit)
+	} else {
+		s.ln = ln
 	}
 	s.wg.Add(1)
 	go s.monitorListener()
@@ -208,8 +218,24 @@ func (s *Service) monitorListener() {
 		logf("S[%s] stopping listening on %s", s.sid, s.ln.Addr())
 		s.ln.Close()
 	}()
-	// wait for service Stop
-	<-s.stopCh
+	for {
+		select {
+		// wait for service Stop
+		case <-s.stopCh:
+			return
+		case c := <-s.counterCh:
+			switch c {
+			case countAccept:
+				s.accepted++
+			case countDrop:
+				s.dropped++
+			case countConn:
+				s.connCount++
+			case countConnDone:
+				s.connCount--
+			}
+		}
+	}
 }
 
 // EliminateBytes reduce the num record of rw bytes
@@ -232,8 +258,8 @@ func (s *Service) ReadWriteBytes() (int64, int64) {
 
 // helper for montiorConn
 func (s *Service) grabConn(c *MonConn) {
-	atomic.AddInt64(&s.connCount, 1)
-	atomic.AddInt64(&s.accepted, 1)
+	s.counterCh <- countConn
+	s.counterCh <- countAccept
 	// limit IPs
 	if s.IPLimit > 0 {
 		clientIP := c.clientIP()
@@ -246,7 +272,7 @@ func (s *Service) grabConn(c *MonConn) {
 
 // helper for montiorConn
 func (s *Service) dropConn(c *MonConn) {
-	atomic.AddInt64(&s.connCount, -1)
+	s.counterCh <- countConnDone
 	clientIP := c.clientIP()
 	if s.IPLimit > 0 {
 		s.IPBucket.Remove(clientIP)
