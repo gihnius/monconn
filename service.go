@@ -295,7 +295,8 @@ func (s *Service) monitorConn(c *MonConn) {
 		s.IdleInterval = 5
 		logf("S[%s] *IdleInterval* must >= 5", s.sid)
 	}
-	heartbeat := time.Tick(time.Second * time.Duration(s.IdleInterval))
+	ticker := time.NewTicker(time.Second * time.Duration(s.IdleInterval))
+	defer ticker.Stop()
 	for {
 		select {
 		case <-s.stopCh:
@@ -314,7 +315,7 @@ func (s *Service) monitorConn(c *MonConn) {
 				logf("S[%s] connection %s monitor finished.", s.sid, c.label)
 			}
 			return
-		case <-heartbeat:
+		case <-ticker.C:
 			if c.Idle() {
 				if Debug {
 					logf("S[%s] connection idle too long: %s", s.sid, c.Log())
