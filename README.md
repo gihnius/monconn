@@ -6,11 +6,11 @@ A TCP connection monitoring tool written in Go.
 
 This is a tool(a library and a command line) for monitoring and debugging network services.
 
-I built this for the purpose of facilitating debugging and monitoring the network connections of IoT devices. At this stage, it is just an experimental tool.
+~~I built this for the purpose of facilitating debugging and monitoring the network connections of IoT devices. At this stage, it is just an experimental tool.~~
 
-Note: For each tcp connection, an additional goroutine is used for monitoring, and uses a MonConn struct to store the monitored info, which takes up a bit more memory. For 5000 long connections, it takes up about 80~100MB of memory.
+~~Note: For each tcp connection, an additional goroutine is used for monitoring, and uses a MonConn struct to store the monitored info, which takes up a bit more memory. For 5000 long connections, it takes up about 80~100MB of memory.~~
 
-So it's not recommended to use it in high performance production environment.
+~~So it's not recommended to use it in high performance production environment.~~
 
 **features**
 
